@@ -317,7 +317,7 @@ def load(name, llama_dir, llama_type="7B", device="cuda" if torch.cuda.is_availa
         clip_model='ViT-L/14',
         v_embed_dim=768, v_depth=8,
         v_num_heads=16, v_mlp_ratio=4.0,
-        query_len=10, query_layer=31,
+        query_len=10, query_layer=30,
         w_bias=model_cfg.get('w_bias', False), 
         w_lora=model_cfg.get('w_lora', False), 
         lora_rank=model_cfg.get('lora_rank', 16),
