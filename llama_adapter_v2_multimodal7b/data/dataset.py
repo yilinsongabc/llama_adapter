@@ -10,13 +10,14 @@ import torchvision.transforms as transforms
 import pandas as pd
 import random
 import cv2
-
+import pdb
+import re
 try:
     from torchvision.transforms import InterpolationMode
     BICUBIC = InterpolationMode.BICUBIC
 except ImportError:
     BICUBIC = Image.BICUBIC
-
+import os
 
 PROMPT_DICT = {
     "prompt_input": (
@@ -41,19 +42,21 @@ transform_train = transforms.Compose([
 class FinetuneDataset(Dataset):
     def __init__(self, config_path, transform, max_words=30, tokenizer_path=None):
         print(f"read dataset config from {config_path}")
-        with open(config_path, 'r') as f:
-            self.config = yaml.load(f, Loader=yaml.FullLoader)
+        self.config = json.load(open(config_path, "r"))+json.load(open('/barn6/yilinsong/llava/LLaVA/playground/data/llava_v1_5_mix665k.json',"r"))
+        # with open(config_path, 'r') as f:
+            # self.config = yaml.load(f, Loader=yaml.FullLoader)
         print("DATASET CONFIG:")
-        print(self.config)
-        ann = []
-        for meta_path in self.config['META']:
-            meta_l = json.load(open(meta_path))
-            print(f"{meta_path}: len {len(meta_l)}")
-            ann += meta_l
-        self.ann = ann
+        # print(self.config)
+        # ann = []
+        # for meta_path in self.config['META']:
+        #     meta_l = json.load(open(meta_path))
+        #     print(f"{meta_path}: len {len(meta_l)}")
+        #     ann += meta_l
+        self.ann = self.config
         print(f"total length: {len(self)}")
         self.transform = transform
         self.max_words = max_words
+        self.image_folder = '/barn6/yilinsong/llava/LLaVA/playground/data/'
         self.tokenizer = Tokenizer(model_path=tokenizer_path)
 
     def __len__(self):
@@ -61,21 +64,65 @@ class FinetuneDataset(Dataset):
 
     def __getitem__(self, index):
         data_item = self.ann[index]
-        if 'image' in data_item.keys():
-            filename = data_item['image']
-            question = data_item['conversations'][0]['value']
-            answer = data_item['conversations'][1]['value']
+        # if 'image' in data_item.keys():
+        #     filename = os.path.join(self.image_folder,data_item['image'])
+        #     question = data_item['conversations'][0]['value']
+        #     answer = data_item['conversations'][1]['value']
      
-            image = cv2.imread(filename)
-            image = Image.fromarray(image)
-            image = self.transform(image)
-            format_instruction = question
-            format_input = None
+        #     image = cv2.imread(filename)
+        #     image = Image.fromarray(image)
+        #     image = self.transform(image)
+        #     format_instruction = question
+        #     format_input = None
+        # else:
+        #     image = torch.zeros(3, 224, 224)
+        #     format_instruction = data_item['instruction'],
+        #     format_input = data_item['input']
+        #     answer = data_item['output']
+
+        output_list  = []
+        if 'image' in data_item.keys():
+            image_list = re.split(',',data_item['image'])
+            
+            if len(image_list)>1:
+                for filename in image_list:
+                    # filename = os.path.join(self.image_folder,image_name)
+
+                    try:
+                        image = cv2.imread(filename)
+                        image = Image.fromarray(image)
+                        image = self.transform(image)
+                    except:
+                        print('image_missing')
+                        image = Image.open('/barn6/yilinsong/llava/LLaVA/images/llava_v1_5_radar.jpg').convert('RGB')
+                        image = self.transform(image)
+                    output_list.append(image)
+            else:
+                for i in range(6):
+                    filename = os.path.join(self.image_folder,image_list[0])
+
+                    try:
+                        image = cv2.imread(filename)
+                        image = Image.fromarray(image)
+                        image = self.transform(image)
+                    except:
+                        print('image_missing')
+                        image = Image.open('/barn6/yilinsong/llava/LLaVA/images/llava_v1_5_radar.jpg').convert('RGB')
+                        image = self.transform(image)
+                    output_list.append(image)
+
         else:
-            image = torch.zeros(3, 224, 224)
-            format_instruction = data_item['instruction'],
-            format_input = data_item['input']
-            answer = data_item['output']
+            for i in range(6):
+                image = torch.zeros(3, 224, 224)
+                output_list.append(image)
+        image = torch.stack(output_list,axis=0)
+
+        question = data_item['conversations'][0]['value']
+        answer = data_item['conversations'][1]['value']
+        format_instruction = question
+        format_input = None
+
+        
         input1 = llama.utils.format_prompt(format_instruction, format_input)
         input2 = input1 + answer
         input1 = torch.tensor(self.tokenizer.encode(input1, bos=True, eos=False), dtype=torch.int64)

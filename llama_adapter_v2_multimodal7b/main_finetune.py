@@ -16,7 +16,7 @@ import numpy as np
 import os
 import time
 from pathlib import Path
-
+import pdb
 from engine_finetune import train_one_epoch
 
 
@@ -35,7 +35,7 @@ def get_args_parser():
                         help='path to LLaMA pretrained checkpoint')
     parser.add_argument('--pretrained_path', default='/path/to/pretrained', type=str,
                         help='path to checkpoint from pretrain stage')
-    parser.add_argument('--max_words', default=512, type=int,
+    parser.add_argument('--max_words', default=1024, type=int,
                         help='max number of input words')
 
     # Optimizer parameters

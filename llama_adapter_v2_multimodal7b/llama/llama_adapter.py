@@ -10,7 +10,7 @@ from timm.models.vision_transformer import Block
 from .llama import ModelArgs, Transformer
 from .tokenizer import Tokenizer
 from .utils import sample_top_p, _download
-
+import pdb
 
 class LLaMA_adapter(nn.Module):
 
@@ -19,11 +19,12 @@ class LLaMA_adapter(nn.Module):
                  clip_model='ViT-L/14',
                  v_embed_dim=768, v_depth=8,
                  v_num_heads=16, v_mlp_ratio=4.0,
-                 query_len=10, query_layer=31,
+                 query_len=10, query_layer=30,
                  w_bias=False, 
                  w_lora=False, lora_rank=16, 
                  w_new_gate=False,
                  phase="finetune"):
+        # query_len default 10
         super().__init__()
 
         # load llama configs
@@ -73,6 +74,7 @@ class LLaMA_adapter(nn.Module):
         for ckpt in ckpts:
             ckpt = torch.load(ckpt, map_location='cpu')
             self.llama.load_state_dict(ckpt, strict=False)
+            
 
         del self.clip.transformer
 
@@ -133,11 +135,14 @@ class LLaMA_adapter(nn.Module):
         return x
 
     def forward_visual(self, imgs):
+        B,C= imgs.shape[0],imgs.shape[1]
+        imgs = imgs.reshape(B*C,3,224,224)
         clip_feats = self.clip_encode_image(imgs)
         clip_feats = self.clip_proj_norm(self.clip_proj(clip_feats.float()))
+        clip_feats = clip_feats.reshape(B,C*clip_feats.shape[1],clip_feats.shape[2])
 
         visual_query = self.visual_query.weight.unsqueeze(
-            0).repeat(len(imgs), 1, 1)
+            0).repeat(B, 1, 1)
         visual_query = torch.cat([visual_query, clip_feats], dim=1)
         for block in self.visual_blocks:
             visual_query = block(visual_query)
@@ -150,7 +155,6 @@ class LLaMA_adapter(nn.Module):
 
     def forward(self, tokens, labels, imgs):
         visual_query = self.forward_visual(imgs)
-
         _bsz, seqlen = tokens.shape
 
         h = self.llama.tok_embeddings(tokens)
@@ -194,8 +198,9 @@ class LLaMA_adapter(nn.Module):
         mask = torch.full((1, 1, seqlen, seqlen), float("-inf"), device=h.device)
         mask = torch.triu(mask, diagonal=start_pos + 1).type_as(h)
 
-        for layer in self.llama.layers[:-1 * self.query_layer]:
+        for layer_id,layer in enumerate(self.llama.layers[:-1 * self.query_layer]):
             h = layer(h, start_pos, freqs_cis, mask)
+            
 
         adapter = self.adapter_query.weight.reshape(self.query_layer, self.query_len, -1).unsqueeze(1)
         adapter_index = 0
@@ -220,7 +225,7 @@ class LLaMA_adapter(nn.Module):
         bsz = len(imgs)
         params = self.llama.params
         assert bsz <= params.max_batch_size, (bsz, params.max_batch_size)
-        assert len(imgs) == len(prompts)
+        # assert len(imgs) == len(prompts)
 
         with torch.cuda.amp.autocast():
             visual_query = self.forward_visual(imgs)

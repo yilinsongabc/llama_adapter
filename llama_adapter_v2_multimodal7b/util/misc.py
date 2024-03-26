@@ -21,7 +21,9 @@ from tqdm import tqdm
 import torch
 import torch.utils.data
 import torch.distributed as dist
-from torch._six import inf
+import pdb
+
+from torch import inf
 
 
 class SmoothedValue(object):
@@ -323,7 +325,8 @@ def load_model(model_without_ddp, path):
     else:
         checkpoint = torch.load(path, map_location='cpu')
     new_checkpoint = {}
-    for key, value in checkpoint['model'].items():
+#    for key, value in checkpoint['model'].items():
+    for key, value in checkpoint.items():
         key = key.replace("llma", "llama")
         new_checkpoint[key] = value
     print(model_without_ddp.load_state_dict(new_checkpoint, strict=False))
